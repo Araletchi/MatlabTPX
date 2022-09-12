@@ -12,13 +12,17 @@ clc; clear;
 %   {props}: properties of each TPX3 file regions of interest (pixels, size, centroids, ...)
 %   {tracks}: events resulting from each TPX3 file (same as {T} but for each non-empty TPX3 file)
 %
-% Pixel size calculation only applies for cricket noise measurements
+%   **** Pixel size calculation only applies for cricket noise measurements
 %
-% OUTPUT: date_time-Resulting_tracks.txt file shows track information using CERF algorith and track shape
+%
+% OUTPUT: 
+%   date_time-Resulting_tracks.txt file shows track information using CERF algorith and track shape
+%   date_time-TIFF_files.txt shows TIFF file info (number of pixels and intensity)
+%   date_time_Resulting_image.txt shows the merged image of all tracks after TIFF files
 %
 % **********************************************************************************************************************************
 
-[file_sel,path1]=uigetfile('*.tpx3', 'Select file: ');                      % Select file 
+[file_sel,path1]=uigetfile('*.*', 'Select file: ');                      % Select one file from folder
 [filepath,name,ext]=fileparts(file_sel);  
 w=warning('off','all');
 
@@ -26,8 +30,10 @@ filelist=fullfile(path1,append('*',ext));                                   % Fi
 source=dir(filelist);
 
 tpfiles=dir([path1 '\*.tpx3']);
+tifiles=dir([path1 '\*.tiff']);
 
 ltpx=length(tpfiles);
+ltif=length(tifiles);
 
 
 % ******************** (1) TPX3 FILES ANALYSIS (IF EXIST) ********************
@@ -182,7 +188,7 @@ clearvars a b i j ld valuesx valuesy
 % ******************** (6) CLUSTERS IDENTIFICATION ********************
 
 % Create a file to save results
-fid=fopen(append(datestr(now,'mmdd_HHMM-'),'Resulting_tracks','.txt'),'wt');
+fid=fopen(append(datestr(now,'yyyymmdd_HHMM-'),'Resulting_tracks','.txt'),'wt');
 
 lT=length(T);
 Tmeas={};
@@ -358,13 +364,48 @@ if question=='Y'
         
         clearvars i j xval yval
     else
-        return
+        fprintf(' ');
 end
 
 
-%%
+% ******************** (8)  TIFF FILES ANALYSIS (IF EXIST) ********************
 
-% **************************************** FUNCTION FOR TPX3 FILES ****************************************
+if ltif>0
+
+    R=uint16(zeros(256));                                                       % Initiliaze matrix to save resulting image
+    
+    % Create a file to store the non-empty images list
+    fileID=fopen(append(datestr(now,'mmdd_HHMM-'),'TIFF_files','.txt'),'wt');
+    
+    for k=1:ltif                                                               % Along all the files
+        imglist=tifiles(k).name;
+        allimg=fullfile(tifiles(k).folder,imglist);
+        A=imread(allimg);
+        a=sum(A,'all');
+        b=length(find(A(:)>1));                                                 % Activated pixels
+    
+        if b<=1                                                                 % Avoid single pixels hotspots                                                
+            R=R;                    
+        else %(a>0 && max_a<15000)                                              % Saves to a single matrix and non-zero values to a TXT file
+            R=R+A;
+            fprintf(fileID, 'File: %s  - Sum: %d Pixels: %d \n', imglist,a,length(find(A(:)>1)));
+        end
+    end
+    
+    fclose(fileID);
+    
+    if sum(R,'all')~=0
+        figure(1)
+        result=imagesc(R);                                                          % Show image
+        title('Resulting image (TIFF composition)');
+        colorbar;
+        % Save resulting image including date
+        hgexport(gcf,append(datestr(now,'mmdd_HHMM-'),'Resulting_image'), hgexport('factorystyle'), 'Format', regexprep('tiff','[.]',''));
+    end
+end
+
+
+% ******************** (99) FUNCTION FOR TPX3 FILES ********************
 
 function tpx2txt(tpx3file, fileout)
   D=dir(tpx3file);
